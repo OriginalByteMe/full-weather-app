@@ -1,11 +1,11 @@
 "use client";
 
-import { queryClient } from "@/utils/trpc";
+import { ORPCContext, orpc, queryClient } from "@/utils/orpc";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
-import { ThemeProvider } from "./theme-provider";
-import { Toaster } from "./ui/sonner";
+import { ThemeProvider } from "web/src/components/theme-provider";
+import { Toaster } from "web/src/components/ui/sonner";
 
 export default function Providers({ children }: { children: React.ReactNode }) {
 	return (
@@ -16,7 +16,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
 			disableTransitionOnChange
 		>
 			<QueryClientProvider client={queryClient}>
-				{children}
+				<ORPCContext.Provider value={orpc}>{children}</ORPCContext.Provider>
 				<ReactQueryDevtools />
 			</QueryClientProvider>
 			<Toaster richColors />

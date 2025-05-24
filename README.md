@@ -1,6 +1,6 @@
 # my-better-t-app
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines Next.js, Next, TRPC, and more.
+This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines Next.js, Express, ORPC, and more.
 
 ## Features
 
@@ -8,13 +8,12 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 - **Next.js** - Full-stack React framework
 - **TailwindCSS** - Utility-first CSS for rapid UI development
 - **shadcn/ui** - Reusable UI components
-- **Next.js** - Full-stack React framework
-- **tRPC** - End-to-end type-safe APIs
+- **Express** - Fast, unopinionated web framework
+- **oRPC** - End-to-end type-safe APIs with OpenAPI integration
 - **Bun** - Runtime environment
 - **Drizzle** - TypeScript-first ORM
 - **PostgreSQL** - Database engine
 - **Biome** - Linting and formatting
-- **Husky** - Git hooks for code quality
 
 ## Getting Started
 
@@ -54,7 +53,7 @@ The API is running at [http://localhost:3000](http://localhost:3000).
 my-better-t-app/
 ├── apps/
 │   ├── web/         # Frontend application (Next.js)
-│   └── server/      # Backend API (Next, TRPC)
+│   └── server/      # Backend API (Express, ORPC)
 ```
 
 ## Available Scripts

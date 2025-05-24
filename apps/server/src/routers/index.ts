@@ -1,8 +1,8 @@
-import { publicProcedure, router } from "../lib/trpc";
+import { publicProcedure } from "server/src/lib/orpc";
 
-export const appRouter = router({
-	healthCheck: publicProcedure.query(() => {
+export const appRouter = {
+	healthCheck: publicProcedure.handler(() => {
 		return "OK";
 	}),
-});
+};
 export type AppRouter = typeof appRouter;
