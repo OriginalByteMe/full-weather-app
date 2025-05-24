@@ -25,10 +25,10 @@ export const appRouter = {
         const geoUrl = `https://geocoding-api.open-meteo.com/v1/search`;
         const geoResponse = await axios.get(geoUrl, {
           params: {
-            name: location, // The location query string
-            count: 1,       // We only want the top result
-            language: 'en', // Optional: for English names
-            format: 'json',   // Default, but explicit
+            name: location,
+            count: 1,
+            language: 'en',
+            format: 'json',
           },
         });
 
@@ -70,27 +70,38 @@ export const appRouter = {
         }
 
         const dailyTimes = weatherResponse.data.daily.time as string[];
-        const dailyMeanTemps = weatherResponse.data.daily.temperature_2m_mean as number[];
+        const dailyMeanTemps = weatherResponse.data.daily.temperature_2m_mean as (number | null)[];
 
-        if (dailyMeanTemps.length === 0) {
-          throw new Error(`No historical temperature data available for the period ${startDate} to ${endDate}.`);
+        if (!dailyTimes || !dailyMeanTemps || dailyTimes.length === 0 || dailyMeanTemps.length !== dailyTimes.length) {
+          throw new Error(`Historical weather data is incomplete or mismatched for the period ${startDate} to ${endDate}.`);
         }
 
-        // Filter out any null or non-numeric temperatures if Open-Meteo can return them
-        const validTemps = dailyMeanTemps.filter(temp => typeof temp === 'number' && !isNaN(temp));
-        
-        if (validTemps.length === 0) {
-          throw new Error(`All temperature data for the period ${startDate} to ${endDate} was invalid.`);
-        }
+        const dailyTemperatures = dailyTimes.map((date, index) => ({
+          date,
+          temperature: dailyMeanTemps[index] !== null && dailyMeanTemps[index] !== undefined ? parseFloat(dailyMeanTemps[index]!.toFixed(2)) : null,
+        }));
 
-        const averageTemperature = validTemps.reduce((sum, temp) => sum + temp, 0) / validTemps.length;
+        const validTemps = dailyMeanTemps.filter(
+          (temp): temp is number => temp !== null && temp !== undefined
+        );
+
+        let overallAverageTemperatureCalc: number | null = null;
+        if (validTemps.length > 0) {
+          const sumTemp = validTemps.reduce((acc, temp) => acc + temp, 0);
+          overallAverageTemperatureCalc = parseFloat((sumTemp / validTemps.length).toFixed(2));
+        } else {
+          throw new Error(
+            `No temperature data points found for ${geocodedLocationName} between ${startDate} and ${endDate}.`
+          );
+        }
 
         return {
-          averageTemperature: parseFloat(averageTemperature.toFixed(2)),
-          fetchedLocationName: geocodedLocationName, // Use the name from geocoding API
-          daysFetched: validTemps.length,
-          startDate,
-          endDate,
+          overallAverageTemperature: overallAverageTemperatureCalc,
+          dailyTemperatures,
+          fetchedLocationName: geocodedLocationName,
+          daysFetched: dailyTemperatures.length,
+          startDate: dailyTemperatures[0]?.date || startDate,
+          endDate: dailyTemperatures[dailyTemperatures.length - 1]?.date || endDate,
         };
 
       } catch (error: any) {

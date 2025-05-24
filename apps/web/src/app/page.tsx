@@ -3,6 +3,13 @@
 import { useState } from "react";
 import { orpc } from "@/utils/orpc";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import * as RechartsPrimitive from 'recharts';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,12 +23,18 @@ export default function Home() {
 
   const [location, setLocation] = useState<string>("");
   const [days, setDays] = useState<number[]>([7]);
-  const [averageTemperature, setAverageTemperature] = useState<number | null>(null);
+  const [overallAverageTemperature, setOverallAverageTemperature] = useState<number | null>(null);
+  const [dailyChartData, setDailyChartData] = useState<Array<{ date: string; temperature: number | null; }>>([]);
   const [fetchedLocationName, setFetchedLocationName] = useState<string | null>(null);
   const [weatherError, setWeatherError] = useState<string | null>(null);
 
+  interface DailyTemperaturePoint {
+    date: string;
+    temperature: number | null;
+  }
   interface WeatherDataResponse {
-    averageTemperature: number;
+    overallAverageTemperature: number | null;
+    dailyTemperatures: DailyTemperaturePoint[];
     fetchedLocationName: string;
     daysFetched: number;
     startDate: string;
@@ -32,16 +45,25 @@ export default function Home() {
     days: number;
   }
 
+  const chartConfig = {
+    temperature: {
+      label: "Temperature",
+      color: "hsl(221.2 83.2% 53.3%)", // A nice blue color
+    },
+  } satisfies ChartConfig;
+
   const weatherMutation = useMutation<WeatherDataResponse, Error, WeatherVariables>({
     ...orpc.getWeatherData.mutationOptions(),
     onMutate: () => {
-      setAverageTemperature(null);
+      setOverallAverageTemperature(null);
+      setDailyChartData([]);
       setWeatherError(null);
       setFetchedLocationName(null);
     },
     onSuccess: (data) => {
-      setAverageTemperature(data.averageTemperature);
-      setFetchedLocationName(data.fetchedLocationName || location); 
+      setOverallAverageTemperature(data.overallAverageTemperature);
+      setDailyChartData(data.dailyTemperatures.map(p => ({ ...p, date: new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) })));
+      setFetchedLocationName(data.fetchedLocationName);
     },
     onError: (error: Error) => {
       console.error("Error fetching weather data:", error);
@@ -129,7 +151,14 @@ export default function Home() {
               {weatherMutation.isPending ? "Calculating..." : "Get Average Temperature"}
             </Button>
 
-            {weatherError && !weatherMutation.isPending && (
+            {weatherMutation.isPending && (
+              <div className="mt-4 w-full rounded-md border bg-muted p-4 text-center">
+                <p className="text-lg font-semibold">Calculating average...</p>
+                <p className="text-sm text-muted-foreground">Please wait a moment.</p>
+              </div>
+            )}
+
+            {weatherError && !weatherMutation.isPending && !weatherMutation.isSuccess && (
               <div className="mt-4 w-full rounded-md border border-red-500 bg-destructive/10 p-3 text-center">
                 <p className="text-sm font-semibold text-destructive">
                   Error: {weatherError}
@@ -137,32 +166,72 @@ export default function Home() {
               </div>
             )}
 
-            {weatherMutation.data && !weatherError && !weatherMutation.isPending && (
-              <div className="mt-4 w-full rounded-md border bg-muted p-4 text-center">
-                  <p className="text-lg">
-                    Average Temperature:{" "}
-                    <span className="font-semibold">
-                      {weatherMutation.data.averageTemperature}°C
-                    </span>
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Location: {weatherMutation.data.fetchedLocationName}
-                  </p>
-                  {weatherMutation.data.startDate && weatherMutation.data.endDate && (
-                    <p className="text-sm text-muted-foreground">
-                      Period: {weatherMutation.data.startDate} to {weatherMutation.data.endDate}
-                    </p>
+            {weatherMutation.isSuccess && fetchedLocationName && !weatherMutation.isPending && !weatherError && (
+              <Card className="mt-4 w-full">
+                <CardHeader>
+                  <CardTitle>Historical Weather</CardTitle>
+                  <CardDescription>
+                    Historical daily average temperatures for {fetchedLocationName}.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-6">
+                  {overallAverageTemperature !== null && (
+                    <div className="text-center mb-4">
+                      <p className="text-2xl font-bold">Overall Average: {overallAverageTemperature}°C</p>
+                      <p className="text-xs text-muted-foreground">
+                        For period: {weatherMutation.data?.startDate} to {weatherMutation.data?.endDate} ({weatherMutation.data?.daysFetched} days)
+                      </p>
+                    </div>
                   )}
-                  <p className="text-sm text-muted-foreground">
-                    Actual days with data: {weatherMutation.data.daysFetched}
-                  </p>
-              </div>
-            )}
-            {weatherMutation.isPending && (
-                 <div className="mt-4 w-full rounded-md border bg-muted p-4 text-center">
-                    <p className="text-lg font-semibold">Calculating average...</p>
-                    <p className="text-sm text-muted-foreground">Please wait a moment.</p>
-                 </div>
+                  {dailyChartData.length > 0 && (
+                    <div className="w-full">
+                      <ChartContainer config={chartConfig} className="h-full w-full">
+                        <RechartsPrimitive.ResponsiveContainer width="100%" height="100%">
+                          <RechartsPrimitive.AreaChart data={dailyChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                            <defs>
+                              <linearGradient id="colorTemperature" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="var(--color-temperature)" stopOpacity={0.8}/>
+                                <stop offset="95%" stopColor="var(--color-temperature)" stopOpacity={0.1}/>
+                              </linearGradient>
+                            </defs>
+                            <RechartsPrimitive.CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <RechartsPrimitive.XAxis 
+                              dataKey="date" 
+                              tickLine={false}
+                              axisLine={false}
+                              tickMargin={8}
+                            />
+                            <RechartsPrimitive.YAxis 
+                              tickLine={false}
+                              axisLine={false}
+                              tickMargin={8}
+                              tickFormatter={(value) => `${value}°C`}
+                              domain={['auto', 'auto']}
+                            />
+                            <ChartTooltip 
+                              cursor={true} 
+                              content={<ChartTooltipContent indicator="line" nameKey="temperature" hideLabel />} 
+                            />
+                            <RechartsPrimitive.Area 
+                              dataKey="temperature" 
+                              type="monotone" 
+                              stroke="var(--color-temperature)" 
+                              fillOpacity={1}
+                              fill="url(#colorTemperature)"
+                              strokeWidth={2} 
+                              dot={false} 
+                              activeDot={{ r: 6, strokeWidth: 2 }}
+                            />
+                          </RechartsPrimitive.AreaChart>
+                        </RechartsPrimitive.ResponsiveContainer>
+                      </ChartContainer>
+                    </div>
+                  )}
+                  {dailyChartData.length === 0 && overallAverageTemperature === null && (
+                     <p className="text-center text-muted-foreground">No temperature data available for the selected period.</p>
+                  )}
+                </CardContent>
+              </Card>
             )}
           </CardFooter>
         </Card>
