@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { orpc } from "@/utils/orpc";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,37 +15,56 @@ export default function Home() {
   const healthCheck = useQuery(orpc.healthCheck.queryOptions());
 
   const [location, setLocation] = useState<string>("");
-  const [days, setDays] = useState<number[]>([7]); // Slider value is an array
+  const [days, setDays] = useState<number[]>([7]);
   const [averageTemperature, setAverageTemperature] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [fetchedLocationName, setFetchedLocationName] = useState<string | null>(null);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
+
+  interface WeatherDataResponse {
+    averageTemperature: number;
+    fetchedLocationName: string;
+    daysFetched: number;
+    startDate: string;
+    endDate: string;
+  }
+  interface WeatherVariables {
+    location: string;
+    days: number;
+  }
+
+  const weatherMutation = useMutation<WeatherDataResponse, Error, WeatherVariables>({
+    ...orpc.getWeatherData.mutationOptions(),
+    onMutate: () => {
+      setAverageTemperature(null);
+      setWeatherError(null);
+      setFetchedLocationName(null);
+    },
+    onSuccess: (data) => {
+      setAverageTemperature(data.averageTemperature);
+      setFetchedLocationName(data.fetchedLocationName || location); 
+    },
+    onError: (error: Error) => {
+      console.error("Error fetching weather data:", error);
+      setWeatherError(error.message || "An unknown error occurred.");
+    },
+  });
 
   const handleFetchWeather = async () => {
-    setIsLoading(true);
-    setAverageTemperature(null);
-    console.log("Fetching weather for:", location, "for", days[0], "days");
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    // In a real scenario, you'd call your backend here:
-    // try {
-    //   const result = await orpc.getAverageTemperature.mutate({ location, days: days[0] });
-    //   setAverageTemperature(result.averageTemp);
-    // } catch (error) {
-    //   console.error("Error fetching weather data:", error);
-    //   // Handle error display to user, e.g., using a toast notification
-    // }
-    setAverageTemperature(Math.floor(Math.random() * 15) + 5); // Placeholder result
-    setIsLoading(false);
+    const daysToSend = Math.min(Math.max(days[0], 1), 365);
+    if (days[0] !== daysToSend) {
+        setDays([daysToSend]);
+    }
+    weatherMutation.mutate({ location, days: daysToSend });
   };
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-8">
-
       <div className="flex justify-center">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-2xl">Weather Wise</CardTitle>
             <CardDescription>
-              Get the average temperature for any location.
+              Get the average temperature for any location (up to 365 days).
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-6">
@@ -76,20 +95,27 @@ export default function Home() {
                 placeholder="e.g., San Francisco, CA"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                disabled={isLoading}
+                disabled={weatherMutation.isPending}
               />
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="days">Number of Days: {days[0]}</Label>
+              <Label htmlFor="days">
+                Past Days: {days[0]}
+                {weatherMutation.data && weatherMutation.data.startDate && weatherMutation.data.endDate && (
+                  <span className="text-sm text-muted-foreground ml-2">
+                    (Range: {weatherMutation.data.startDate} - {weatherMutation.data.endDate})
+                  </span>
+                )}
+              </Label>
               <Slider
                 id="days"
                 min={1}
-                max={30}
+                max={365}
                 step={1}
                 value={days}
                 onValueChange={setDays}
-                disabled={isLoading}
+                disabled={weatherMutation.isPending}
                 className="py-2"
               />
             </div>
@@ -97,20 +123,42 @@ export default function Home() {
           <CardFooter className="flex flex-col gap-4">
             <Button
               onClick={handleFetchWeather}
-              disabled={isLoading || !location}
+              disabled={weatherMutation.isPending || !location}
               className="w-full"
             >
-              {isLoading ? "Calculating..." : "Get Average Temperature"}
+              {weatherMutation.isPending ? "Calculating..." : "Get Average Temperature"}
             </Button>
-            {averageTemperature !== null && !isLoading && (
-              <div className="mt-4 w-full rounded-md border bg-muted p-4 text-center">
-                <p className="text-sm text-muted-foreground">
-                  Average temperature for {location} over {days[0]} days:
+
+            {weatherError && !weatherMutation.isPending && (
+              <div className="mt-4 w-full rounded-md border border-red-500 bg-destructive/10 p-3 text-center">
+                <p className="text-sm font-semibold text-destructive">
+                  Error: {weatherError}
                 </p>
-                <p className="text-3xl font-bold">{averageTemperature}°C</p>
               </div>
             )}
-            {isLoading && (
+
+            {weatherMutation.data && !weatherError && !weatherMutation.isPending && (
+              <div className="mt-4 w-full rounded-md border bg-muted p-4 text-center">
+                  <p className="text-lg">
+                    Average Temperature:{" "}
+                    <span className="font-semibold">
+                      {weatherMutation.data.averageTemperature}°C
+                    </span>
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Location: {weatherMutation.data.fetchedLocationName}
+                  </p>
+                  {weatherMutation.data.startDate && weatherMutation.data.endDate && (
+                    <p className="text-sm text-muted-foreground">
+                      Period: {weatherMutation.data.startDate} to {weatherMutation.data.endDate}
+                    </p>
+                  )}
+                  <p className="text-sm text-muted-foreground">
+                    Actual days with data: {weatherMutation.data.daysFetched}
+                  </p>
+              </div>
+            )}
+            {weatherMutation.isPending && (
                  <div className="mt-4 w-full rounded-md border bg-muted p-4 text-center">
                     <p className="text-lg font-semibold">Calculating average...</p>
                     <p className="text-sm text-muted-foreground">Please wait a moment.</p>
