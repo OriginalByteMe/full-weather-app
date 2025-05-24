@@ -1,4 +1,4 @@
-import { publicProcedure } from "server/src/lib/orpc";
+import { publicProcedure } from "../lib/orpc";
 
 export const appRouter = {
 	healthCheck: publicProcedure.handler(() => {
