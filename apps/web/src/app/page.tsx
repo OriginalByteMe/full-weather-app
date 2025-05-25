@@ -19,7 +19,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from "@/components/ui/separator";
 
 export default function Home() {
-  const healthCheck = useQuery(orpc.healthCheck.queryOptions());
+  const healthCheck = useQuery(orpc.healthcheck.queryOptions());
 
   const [location, setLocation] = useState<string>("");
   const [days, setDays] = useState<number[]>([7]);
@@ -52,8 +52,25 @@ export default function Home() {
     },
   } satisfies ChartConfig;
 
+    const fetchWeatherData = async (variables: WeatherVariables): Promise<WeatherDataResponse> => {
+    const { location, days } = variables;
+    // TODO: Use environment variable for API base URL instead of hardcoding
+    const response = await fetch(`http://localhost:3000/weather/average?city=${encodeURIComponent(location)}&days=${days}`);
+    
+    if (!response.ok) {
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch (e) {
+        throw new Error(`Request failed with status ${response.status}. Could not parse error response.`);
+      }
+      throw new Error(errorData?.error || errorData?.message || `Request failed with status ${response.status}`);
+    }
+    return response.json();
+  };
+
   const weatherMutation = useMutation<WeatherDataResponse, Error, WeatherVariables>({
-    ...orpc.getWeatherData.mutationOptions(),
+    mutationFn: fetchWeatherData,
     onMutate: () => {
       setOverallAverageTemperature(null);
       setDailyChartData([]);

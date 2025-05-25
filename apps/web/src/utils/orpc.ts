@@ -26,7 +26,7 @@ export const queryClient = new QueryClient({
 });
 
 export const link = new RPCLink({
-	url: `${process.env.NEXT_PUBLIC_SERVER_URL}/rpc`,
+	url: `${process.env.NEXT_PUBLIC_SERVER_URL}/`,
 });
 
 export const client: RouterClient<typeof appRouter> = createORPCClient(link);

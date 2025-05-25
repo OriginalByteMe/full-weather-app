@@ -2,7 +2,7 @@ import "dotenv/config";
 import { RPCHandler } from "@orpc/server/node";
 import cors from "cors";
 import express from "express";
-import { appRouter } from "./routers";
+import { appRouter, weatherRouter } from "./routers";
 
 const app = express();
 
@@ -13,20 +13,23 @@ app.use(
 	}),
 );
 
-const handler = new RPCHandler(appRouter);
-app.use("/rpc{*path}", async (req, res, next) => {
-	const { matched } = await handler.handle(req, res, {
-		prefix: "/rpc",
+app.use(express.json());
+
+app.use("/weather", weatherRouter);
+
+const orpcHandler = new RPCHandler(appRouter);
+app.use("/{*path}", async (req, res, next) => {
+	const { matched } = await orpcHandler.handle(req, res, {
+		prefix: "/", 
 		context: { session: null },
 	});
 	if (matched) return;
 	next();
 });
 
-app.use(express.json());
 
-app.get("/", (_req, res) => {
-	res.status(200).send("OK");
+app.get("/healthcheck", (_req, res) => {
+	res.status(200).send("Server is OK. Weather API at /weather/average. ORPC health check at /healthCheck.");
 });
 
 const port = process.env.PORT || 3000;
