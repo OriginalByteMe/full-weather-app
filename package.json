@@ -15,7 +15,8 @@
 		"db:generate": "bun run --filter server db:generate",
 		"db:migrate": "bun run --filter server db:migrate",
 		"test:web": "bun run --filter web test",
-		"test:web:open": "bun run --filter web test:open"
+		"test:web:open": "bun run --filter web test:open",
+		"test:server": "bun run --filter server test"
 	},
 	"dependencies": {},
 	"devDependencies": {
