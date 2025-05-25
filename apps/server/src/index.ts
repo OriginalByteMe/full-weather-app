@@ -29,7 +29,7 @@ app.use("/{*path}", async (req, res, next) => {
 
 
 app.get("/healthcheck", (_req, res) => {
-	res.status(200).send("Server is OK. Weather API at /weather/average. ORPC health check at /healthCheck.");
+	res.status(200).send("Server is OK.");
 });
 
 const port = process.env.PORT || 3000;

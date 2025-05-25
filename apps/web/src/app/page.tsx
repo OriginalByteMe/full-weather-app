@@ -19,7 +19,18 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from "@/components/ui/separator";
 
 export default function Home() {
-  const healthCheck = useQuery(orpc.healthcheck.queryOptions());
+  const healthCheck = useQuery({
+    queryKey: ['healthcheck'],
+    queryFn: async () => {
+      const response = await fetch('http://localhost:3000/healthcheck', {
+        method: 'GET'
+      });
+      if (!response.ok) {
+        throw new Error('Health check failed');
+      }
+      return await response.text();
+    }
+  });
 
   const [location, setLocation] = useState<string>("");
   const [days, setDays] = useState<number[]>([7]);
