@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: weather-app-db-dev
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: weatherapp
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  server:
+    build:
+      context: .
+      dockerfile: ./apps/server/Dockerfile
+      target: dependencies
+    container_name: weather-app-server-dev
+    command: bun run dev
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/weatherapp
+      CORS_ORIGIN: http://localhost:3001
+    volumes:
+      # Mount source code for hot reload but preserve node_modules
+      - ./apps/server/src:/app/src
+      - ./apps/server/package.json:/app/package.json
+      - ./apps/server/docker-entrypoint.sh:/app/docker-entrypoint.sh
+      - ./apps/server/drizzle.config.ts:/app/drizzle.config.ts
+    networks:
+      - app-network
+
+  web:
+    build:
+      context: .
+      dockerfile: ./apps/web/Dockerfile
+    container_name: weather-app-web-dev
+    command: bun run dev
+    ports:
+      - "3001:3001"
+    depends_on:
+      - server
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_SERVER_URL: http://localhost:3000
+      PORT: 3001
+    networks:
+      - app-network
+    volumes:
+      - ./apps/web:/app
+
+volumes:
+  pgdata-dev:
+
+networks:
+  app-network:
+    driver: bridge

@@ -7,7 +7,6 @@ WORKDIR /app
 FROM base AS dependencies
 COPY package.json bun.lock ./
 COPY apps/web/package.json ./apps/web/
-COPY packages ./packages
 RUN bun install
 
 # Build the app
