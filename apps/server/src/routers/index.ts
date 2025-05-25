@@ -10,6 +10,63 @@ const GetWeatherAverageQuerySchema = z.object({
 
 export const weatherRouter: Router = express.Router();
 
+/**
+ * @swagger
+ * /weather/average:
+ *   get:
+ *     summary: Get average temperature data for a location
+ *     description: Retrieves historical average temperature data for a specified city over a number of past days
+ *     tags: [Weather]
+ *     parameters:
+ *       - in: query
+ *         name: city
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: City name for which to fetch weather data
+ *         example: London
+ *       - in: query
+ *         name: days
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 365
+ *         description: Number of past days to fetch (1-365)
+ *         example: 7
+ *     responses:
+ *       200:
+ *         description: Average temperature data retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/WeatherAverageResponse'
+ *       400:
+ *         description: Invalid request parameters
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Location not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Could not find location
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ */
 async function handleGetWeatherAverage(req: Request, res: Response, next: NextFunction) {
   try {
     const validationResult = GetWeatherAverageQuerySchema.safeParse(req.query);

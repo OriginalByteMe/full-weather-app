@@ -2,7 +2,9 @@ import "dotenv/config";
 import { RPCHandler } from "@orpc/server/node";
 import cors from "cors";
 import express from "express";
+import swaggerUi from "swagger-ui-express";
 import { appRouter, weatherRouter } from "./routers";
+import swaggerSpec from "./swagger";
 
 const app = express();
 
@@ -14,6 +16,9 @@ app.use(
 );
 
 app.use(express.json());
+
+// Serve Swagger UI documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use("/weather", weatherRouter);
 
