@@ -6,7 +6,10 @@
 		"dev": "next dev --turbopack --port=3001",
 		"build": "next build",
 		"start": "next start",
-		"lint": "next lint"
+		"lint": "next lint",
+		"test": "cypress run --browser chrome --headless",
+		"test:headed": "cypress run --browser chrome",
+		"test:open": "cypress open"
 	},
 	"dependencies": {
 		"@orpc/client": "^1.2.0",
