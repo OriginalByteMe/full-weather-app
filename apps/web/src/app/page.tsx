@@ -122,11 +122,15 @@ export default function Home() {
               <h3 className="text-sm font-medium">API Status</h3>
               <div className="flex items-center gap-2">
                 <div
+                  data-testid="api-status-indicator"
                   className={`h-3 w-3 rounded-full transition-colors ${
                     healthCheck.data ? "bg-green-500" : "bg-red-500"
                   }`}
                 />
-                <span className="text-sm text-muted-foreground">
+                <span 
+                  data-testid="api-status-text"
+                  className="text-sm text-muted-foreground"
+                >
                   {healthCheck.isLoading
                     ? "Checking..."
                     : healthCheck.data
@@ -141,6 +145,7 @@ export default function Home() {
             <div className="grid gap-2">
               <Label htmlFor="location">Location</Label>
               <Input
+                data-testid="location-input"
                 id="location"
                 placeholder="e.g., San Francisco, CA"
                 value={location}
@@ -151,14 +156,15 @@ export default function Home() {
 
             <div className="grid gap-2">
               <Label htmlFor="days">
-                Past Days: {days[0]}
+                <span data-testid="days-display">Past Days: {days[0]}</span>
                 {weatherMutation.data && weatherMutation.data.startDate && weatherMutation.data.endDate && (
-                  <span className="text-sm text-muted-foreground ml-2">
+                  <span data-testid="date-range" className="text-sm text-muted-foreground ml-2">
                     (Range: {weatherMutation.data.startDate} - {weatherMutation.data.endDate})
                   </span>
                 )}
               </Label>
               <Slider
+                data-testid="days-slider"
                 id="days"
                 min={1}
                 max={365}
@@ -172,6 +178,7 @@ export default function Home() {
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
             <Button
+              data-testid="submit-button"
               onClick={handleFetchWeather}
               disabled={weatherMutation.isPending || !location}
               className="w-full"
@@ -180,14 +187,14 @@ export default function Home() {
             </Button>
 
             {weatherMutation.isPending && (
-              <div className="mt-4 w-full rounded-md border bg-muted p-4 text-center">
+              <div data-testid="loading-indicator" className="mt-4 w-full rounded-md border bg-muted p-4 text-center">
                 <p className="text-lg font-semibold">Calculating average...</p>
                 <p className="text-sm text-muted-foreground">Please wait a moment.</p>
               </div>
             )}
 
             {weatherError && !weatherMutation.isPending && !weatherMutation.isSuccess && (
-              <div className="mt-4 w-full rounded-md border border-red-500 bg-destructive/10 p-3 text-center">
+              <div data-testid="error-message" className="mt-4 w-full rounded-md border border-red-500 bg-destructive/10 p-3 text-center">
                 <p className="text-sm font-semibold text-destructive">
                   Error: {weatherError}
                 </p>
@@ -204,7 +211,7 @@ export default function Home() {
                 </CardHeader>
                 <CardContent className="grid gap-6">
                   {overallAverageTemperature !== null && (
-                    <div className="text-center mb-4">
+                    <div data-testid="temperature-result" className="text-center mb-4">
                       <p className="text-2xl font-bold">Overall Average: {overallAverageTemperature}°C</p>
                       <p className="text-xs text-muted-foreground">
                         For period: {weatherMutation.data?.startDate} to {weatherMutation.data?.endDate} ({weatherMutation.data?.daysFetched} days)
@@ -212,7 +219,7 @@ export default function Home() {
                     </div>
                   )}
                   {dailyChartData.length > 0 && (
-                    <div className="w-full">
+                    <div data-testid="temperature-chart" className="w-full">
                       <ChartContainer config={chartConfig} className="h-full w-full">
                         <RechartsPrimitive.ResponsiveContainer width="100%" height="100%">
                           <RechartsPrimitive.AreaChart data={dailyChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
