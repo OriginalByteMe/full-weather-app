@@ -1,11 +1,7 @@
 import { publicProcedure } from "../lib/orpc";
 import { z } from "zod";
 import axios from "axios";
-import express, {
-	type Router,
-	type Request,
-	type Response,
-} from "express";
+import express, { type Router, type Request, type Response } from "express";
 
 const GEO_API_URL = "https://geocoding-api.open-meteo.com/v1/search";
 const WEATHER_API_URL = "https://archive-api.open-meteo.com/v1/archive";
@@ -107,12 +103,10 @@ async function handleGetWeatherAverage(req: Request, res: Response) {
 	try {
 		const validationResult = GetWeatherAverageQuerySchema.safeParse(req.query);
 		if (!validationResult.success) {
-			return res
-				.status(400)
-				.json({
-					error: "Invalid query parameters",
-					details: validationResult.error.format(),
-				});
+			return res.status(400).json({
+				error: "Invalid query parameters",
+				details: validationResult.error.format(),
+			});
 		}
 
 		const { city, days } = validationResult.data;
@@ -237,9 +231,10 @@ async function fetchWeatherData(geoData: GeoData, timelineData: TimelineData) {
 	return { dailyTimes, dailyMeanTemps };
 }
 
-function processTemperatureData(
-	weatherData: { dailyTimes: string[]; dailyMeanTemps: (number | null)[] },
-) {
+function processTemperatureData(weatherData: {
+	dailyTimes: string[];
+	dailyMeanTemps: (number | null)[];
+}) {
 	const { dailyTimes, dailyMeanTemps } = weatherData;
 
 	const dailyTemperatures: DailyTemperature[] = dailyTimes.map(
