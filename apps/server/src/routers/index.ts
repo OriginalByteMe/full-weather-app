@@ -1,12 +1,48 @@
 import { publicProcedure } from "../lib/orpc";
 import { z } from "zod";
 import axios from "axios";
-import express, { type Router, type Request, type Response, type NextFunction } from 'express';
+import express, {
+	type Router,
+	type Request,
+	type Response,
+} from "express";
+
+const GEO_API_URL = "https://geocoding-api.open-meteo.com/v1/search";
+const WEATHER_API_URL = "https://archive-api.open-meteo.com/v1/archive";
 
 const GetWeatherAverageQuerySchema = z.object({
-  city: z.string().min(1, "City name is required."),
-  days: z.coerce.number().int().min(1).max(365, "Days must be an integer between 1 and 365."),
+	city: z.string().min(1, "City name is required."),
+	days: z.coerce
+		.number()
+		.int()
+		.min(1)
+		.max(365, "Days must be an integer between 1 and 365."),
 });
+
+type GeoData = {
+	lat: number;
+	lon: number;
+	geocodedLocationName: string;
+};
+
+type TimelineData = {
+	startDate: string;
+	endDate: string;
+};
+
+type DailyTemperature = {
+	date: string;
+	temperature: number | null;
+};
+
+type WeatherResponse = {
+	overallAverageTemperature: number;
+	dailyTemperatures: DailyTemperature[];
+	fetchedLocationName: string;
+	daysFetched: number;
+	startDate: string;
+	endDate: string;
+};
 
 export const weatherRouter: Router = express.Router();
 
@@ -67,116 +103,236 @@ export const weatherRouter: Router = express.Router();
  *                 error:
  *                   type: string
  */
-async function handleGetWeatherAverage(req: Request, res: Response, next: NextFunction) {
-  try {
-    const validationResult = GetWeatherAverageQuerySchema.safeParse(req.query);
-    if (!validationResult.success) {
-      return res.status(400).json({ error: "Invalid query parameters", details: validationResult.error.format() });
-    }
+async function handleGetWeatherAverage(req: Request, res: Response) {
+	try {
+		const validationResult = GetWeatherAverageQuerySchema.safeParse(req.query);
+		if (!validationResult.success) {
+			return res
+				.status(400)
+				.json({
+					error: "Invalid query parameters",
+					details: validationResult.error.format(),
+				});
+		}
 
-    const { city, days } = validationResult.data;
+		const { city, days } = validationResult.data;
 
-    let lat: number, lon: number;
-    let geocodedLocationName: string = city;
+		let geoData: GeoData;
+		try {
+			geoData = await getGeoData(city);
+		} catch (error) {
+			return handleLocationNotFoundError(res, city, error);
+		}
 
-    const geoUrl = `https://geocoding-api.open-meteo.com/v1/search`;
-    const geoResponse = await axios.get(geoUrl, {
-      params: {
-        name: city,
-        count: 1,
-        language: 'en',
-        format: 'json',
-      },
-    });
+		const timelineData = getTimelineData(days);
 
-    if (geoResponse.data && geoResponse.data.results && geoResponse.data.results.length > 0) {
-      const topResult = geoResponse.data.results[0];
-      lat = topResult.latitude;
-      lon = topResult.longitude;
-      geocodedLocationName = topResult.name;
-    } else {
-      return res.status(404).json({ error: `Could not find location: ${city} using Open-Meteo Geocoding.` });
-    }
+		let weatherData;
+		try {
+			weatherData = await fetchWeatherData(geoData, timelineData);
+		} catch (error) {
+			return handleWeatherFetchError(res, error, timelineData);
+		}
 
-    const formatDate = (date: Date): string => date.toISOString().split('T')[0];
-    const today = new Date();
-    const endDateObj = new Date(today);
-    endDateObj.setDate(today.getDate() - 6);
-    const startDateObj = new Date(endDateObj);
-    startDateObj.setDate(endDateObj.getDate() - (days - 1));
+		const { dailyTemperatures, overallAverageTemperature } =
+			processTemperatureData(weatherData);
 
-    const startDate = formatDate(startDateObj);
-    const endDate = formatDate(endDateObj);
+		if (overallAverageTemperature === null) {
+			return res.status(404).json({
+				error: `No temperature data points found for ${geoData.geocodedLocationName} between ${timelineData.startDate} and ${timelineData.endDate}.`,
+			});
+		}
 
-    // Fetch historical weather data (Open-Meteo Archive API)
-    const weatherUrl = `https://archive-api.open-meteo.com/v1/archive`;
-    const weatherResponse = await axios.get(weatherUrl, {
-      params: {
-        latitude: lat,
-        longitude: lon,
-        start_date: startDate,
-        end_date: endDate,
-        daily: 'temperature_2m_mean',
-        timezone: 'auto',
-      },
-    });
-
-    if (!weatherResponse.data || !weatherResponse.data.daily || !weatherResponse.data.daily.time || !weatherResponse.data.daily.temperature_2m_mean) {
-      return res.status(500).json({ error: "Could not fetch historical weather data or data is incomplete from Open-Meteo." });
-    }
-
-    const dailyTimes = weatherResponse.data.daily.time as string[];
-    const dailyMeanTemps = weatherResponse.data.daily.temperature_2m_mean as (number | null)[];
-
-    if (!dailyTimes || !dailyMeanTemps || dailyTimes.length === 0 || dailyMeanTemps.length !== dailyTimes.length) {
-      return res.status(500).json({ error: `Historical weather data is incomplete or mismatched for the period ${startDate} to ${endDate}.` });
-    }
-
-    const dailyTemperatures = dailyTimes.map((date, index) => ({
-      date,
-      temperature: dailyMeanTemps[index] !== null && dailyMeanTemps[index] !== undefined ? parseFloat(dailyMeanTemps[index]!.toFixed(2)) : null,
-    }));
-
-    const validTemps = dailyMeanTemps.filter(
-      (temp): temp is number => temp !== null && temp !== undefined
-    );
-
-    let overallAverageTemperatureCalc: number | null = null;
-    if (validTemps.length > 0) {
-      const sumTemp = validTemps.reduce((acc, temp) => acc + temp, 0);
-      overallAverageTemperatureCalc = parseFloat((sumTemp / validTemps.length).toFixed(2));
-    } else {
-      return res.status(404).json({
-        error: `No temperature data points found for ${geocodedLocationName} between ${startDate} and ${endDate}.`
-      });
-    }
-
-    res.json({
-      overallAverageTemperature: overallAverageTemperatureCalc,
-      dailyTemperatures,
-      fetchedLocationName: geocodedLocationName,
-      daysFetched: dailyTemperatures.length,
-      startDate: dailyTemperatures[0]?.date || startDate,
-      endDate: dailyTemperatures[dailyTemperatures.length - 1]?.date || endDate,
-    });
-
-  } catch (error: any) {
-    console.error("Error in GET /weather/average:", error.message);
-    if (axios.isAxiosError(error) && error.response) {
-      console.error("Axios error details:", error.response.data);
-      const apiErrorMessage = error.response.data?.reason || error.response.data?.message || 'Error communicating with external weather service.';
-      return res.status(error.response.status || 500).json({ error: apiErrorMessage });
-    }
-    res.status(500).json({ error: error.message || "Failed to fetch weather data due to an internal server error." });
-  }
+		return res.json(
+			formatWeatherResponse(
+				overallAverageTemperature,
+				dailyTemperatures,
+				geoData.geocodedLocationName,
+				timelineData,
+			),
+		);
+	} catch (error) {
+		return handleGenericError(res, error);
+	}
 }
 
-weatherRouter.get('/average', handleGetWeatherAverage);
+async function getGeoData(city: string): Promise<GeoData> {
+	const geoResponse = await axios.get(GEO_API_URL, {
+		params: {
+			name: city,
+			count: 1,
+			language: "en",
+			format: "json",
+		},
+	});
+
+	if (geoResponse.data?.results?.length > 0) {
+		const topResult = geoResponse.data.results[0];
+		return {
+			lat: topResult.latitude,
+			lon: topResult.longitude,
+			geocodedLocationName: topResult.name,
+		};
+	}
+
+	throw new Error(
+		`Could not find location: ${city} using Open-Meteo Geocoding.`,
+	);
+}
+
+function getTimelineData(days: number): TimelineData {
+	const formatDate = (date: Date): string => date.toISOString().split("T")[0];
+	const today = new Date();
+	const endDateObj = new Date(today);
+	endDateObj.setDate(today.getDate() - 6);
+	const startDateObj = new Date(endDateObj);
+	startDateObj.setDate(endDateObj.getDate() - (days - 1));
+
+	return {
+		startDate: formatDate(startDateObj),
+		endDate: formatDate(endDateObj),
+	};
+}
+
+async function fetchWeatherData(geoData: GeoData, timelineData: TimelineData) {
+	const { lat, lon } = geoData;
+	const { startDate, endDate } = timelineData;
+
+	const weatherResponse = await axios.get(WEATHER_API_URL, {
+		params: {
+			latitude: lat,
+			longitude: lon,
+			start_date: startDate,
+			end_date: endDate,
+			daily: "temperature_2m_mean",
+			timezone: "auto",
+		},
+	});
+
+	if (
+		!weatherResponse.data?.daily?.time ||
+		!weatherResponse.data?.daily?.temperature_2m_mean
+	) {
+		throw new Error(
+			"Could not fetch historical weather data or data is incomplete from Open-Meteo.",
+		);
+	}
+
+	const dailyTimes = weatherResponse.data.daily.time as string[];
+	const dailyMeanTemps = weatherResponse.data.daily.temperature_2m_mean as (
+		| number
+		| null
+	)[];
+
+	if (
+		!dailyTimes ||
+		!dailyMeanTemps ||
+		dailyTimes.length === 0 ||
+		dailyMeanTemps.length !== dailyTimes.length
+	) {
+		throw new Error(
+			`Historical weather data is incomplete or mismatched for the period ${startDate} to ${endDate}.`,
+		);
+	}
+
+	return { dailyTimes, dailyMeanTemps };
+}
+
+function processTemperatureData(
+	weatherData: { dailyTimes: string[]; dailyMeanTemps: (number | null)[] },
+) {
+	const { dailyTimes, dailyMeanTemps } = weatherData;
+
+	const dailyTemperatures: DailyTemperature[] = dailyTimes.map(
+		(date, index) => ({
+			date,
+			temperature:
+				dailyMeanTemps[index] !== null && dailyMeanTemps[index] !== undefined
+					? parseFloat(dailyMeanTemps[index]!.toFixed(2))
+					: null,
+		}),
+	);
+
+	const validTemps = dailyMeanTemps.filter(
+		(temp): temp is number => temp !== null && temp !== undefined,
+	);
+
+	let overallAverageTemperature: number | null = null;
+	if (validTemps.length > 0) {
+		const sumTemp = validTemps.reduce((acc, temp) => acc + temp, 0);
+		overallAverageTemperature = parseFloat(
+			(sumTemp / validTemps.length).toFixed(2),
+		);
+	}
+
+	return { dailyTemperatures, overallAverageTemperature };
+}
+
+function formatWeatherResponse(
+	overallAverageTemperature: number,
+	dailyTemperatures: DailyTemperature[],
+	locationName: string,
+	timelineData: TimelineData,
+): WeatherResponse {
+	return {
+		overallAverageTemperature,
+		dailyTemperatures,
+		fetchedLocationName: locationName,
+		daysFetched: dailyTemperatures.length,
+		startDate: dailyTemperatures[0]?.date || timelineData.startDate,
+		endDate:
+			dailyTemperatures[dailyTemperatures.length - 1]?.date ||
+			timelineData.endDate,
+	};
+}
+
+function handleLocationNotFoundError(res: Response, city: string, error: any) {
+	console.error(`Location not found error for city: ${city}`, error);
+	return res.status(404).json({
+		error: `Could not find location: ${city} using Open-Meteo Geocoding.`,
+	});
+}
+
+function handleWeatherFetchError(
+	res: Response,
+	error: any,
+	timelineData: TimelineData,
+) {
+	console.error(
+		`Weather fetch error for period ${timelineData.startDate} to ${timelineData.endDate}:`,
+		error,
+	);
+	return res.status(500).json({
+		error: error.message || "Could not fetch historical weather data.",
+	});
+}
+
+function handleGenericError(res: Response, error: any) {
+	console.error("Error in GET /weather/average:", error);
+
+	if (axios.isAxiosError(error) && error.response) {
+		console.error("Axios error details:", error.response.data);
+		const apiErrorMessage =
+			error.response.data?.reason ||
+			error.response.data?.message ||
+			"Error communicating with external weather service.";
+		return res
+			.status(error.response.status || 500)
+			.json({ error: apiErrorMessage });
+	}
+
+	return res.status(500).json({
+		error:
+			error.message ||
+			"Failed to fetch weather data due to an internal server error.",
+	});
+}
+
+weatherRouter.get("/average", handleGetWeatherAverage);
 
 export const appRouter = {
-  healthcheck: publicProcedure.handler(() => {
-    return "OK";
-  }),
+	healthcheck: publicProcedure.handler(() => {
+		return "OK";
+	}),
 };
 
 export type AppRouter = typeof appRouter;
